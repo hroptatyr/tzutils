@@ -888,6 +888,62 @@ zic_fn(const char *fn)
 	return 0;
 }
 
+static void
+associate(void)
+{
+/*
+** Associate sets of rules with zones.
+*/
+	auto inline int rcomp(const void *cp1, const void *cp2)
+	{
+		return strcmp(((const struct rule *) cp1)->r_name,
+			      ((const struct rule *) cp2)->r_name);
+	}
+
+	if (nrules) {
+		/* sort by name */
+		qsort(rules, nrules, sizeof(*rules), rcomp);
+	}
+	/* reset */
+	for (size_t i = 0U; i < nzones; ++i) {
+		zones[i].z_rules = NULL;
+		zones[i].z_nrules = 0U;
+	}
+	for (size_t base = 0U, out; base < nrules; base = out) {
+		for (out = base + 1U; out < nrules; out++) {
+			if (strcmp(rules[base].r_name, rules[out].r_name)) {
+				break;
+			}
+		}
+		for (size_t i = 0U; i < nzones; i++) {
+			if (strcmp(zones[i].z_rule, rules[base].r_name)) {
+				continue;
+			}
+			zones[i].z_rules = rules + base;
+			zones[i].z_nrules = out - base;
+		}
+	}
+	for (size_t i = 0U; i < nzones; i++) {
+		if (zones[i].z_nrules) {
+			/* all good */
+			continue;
+		}
+		/*
+		** Maybe we have a local standard time offset.
+		*/
+		zones[i].z_stdoff =
+			gethms(zones[i].z_rule, _("unruly zone"), true);
+		/*
+		** Note, though, that if there's no rule,
+		** a '%s' in the format is a bad thing.
+		*/
+		if (strchr(zones[i].z_format, '%') != 0) {
+			error(_("%%s in ruleless zone"));
+		}
+	}
+	return;
+}
+
 
 #include "tzicc.yucc"
 
@@ -907,6 +963,9 @@ main(int argc, char *argv[])
 
 		zic_fn(fn);
 	}
+
+	/* associate rules and zones */
+	associate();
 
 out:
 	yuck_free(argi);
