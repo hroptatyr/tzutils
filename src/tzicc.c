@@ -52,6 +52,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include "tzfile.h"
 #include "nifty.h"
 
@@ -146,12 +147,13 @@ static struct lookup const leap_types[] = {
 typedef int_fast64_t zic_t;
 #define ZIC_MIN INT_FAST64_MIN
 #define ZIC_MAX INT_FAST64_MAX
-#define SCNdZIC SCNdFAST64
+#define PRIdZIC	PRIdFAST64
 
 #define TIME_T_BITS_IN_FILE	64
 static const zic_t min_time = (zic_t)-1 << (TIME_T_BITS_IN_FILE - 1);
 static const zic_t max_time = -1 - ((zic_t)-1 << (TIME_T_BITS_IN_FILE - 1));
 
+/* r_dycode			r_dayofmonth	r_wday */
 #define DC_DOM		0	/* 1..31 */	/* unused */
 #define DC_DOWGEQ	1	/* 1..31 */	/* 0..6 (Sun..Sat) */
 #define DC_DOWLEQ	2	/* 1..31 */	/* 0..6 (Sun..Sat) */
@@ -762,8 +764,6 @@ Zone continuation line end time is not after end time of previous line"));
 		zzones = nuz;
 	}
 	zones[nzones++] = z;
-	/* clear z_name for next round */
-	z.z_name = NULL;
 	/*
 	** If there was an UNTIL field on this line,
 	** there's more information about the zone on the next line.
@@ -944,6 +944,116 @@ associate(void)
 	return;
 }
 
+static void
+pr_ical_hdr(void)
+{
+	fputs("\
+BEGIN:VCALENDAR\n\
+VERSION:2.0\n\
+PRODID:-//GA Financial Solutions//echse//EN\n\
+CALSCALE:GREGORIAN\n\
+", stdout);
+	return;
+}
+
+static void
+pr_ical_ftr(void)
+{
+	fputs("\
+END:VCALENDAR\n\
+", stdout);
+	return;
+}
+
+static void
+pr_ical_r(const struct zone z[static 1U], const struct rule r[static 1U])
+{
+	static const char *wday[DAYSPERWEEK] = {
+		"SU", "MO", "TU", "WE", "TH", "FR", "SA",
+	};
+	int new = z->z_gmtoff + r->r_stdoff;
+
+	if (UNLIKELY(r->r_loyear == ZIC_MIN)) {
+		return;
+	}
+
+	fputs("BEGIN:VEVENT\n", stdout);
+
+	fprintf(stdout, "\
+SUMMARY:Daylight saving transition %s -> UTC%+02d:%02d:%02d\n",
+		z->z_name,
+		new / 3600, (new / 60) % 60, new % 60);
+
+	fprintf(stdout, "\
+DTSTART:%" PRIdZIC "0101T%02" PRIdZIC "%02" PRIdZIC "%02" PRIdZIC "\n",
+		r->r_loyear,
+		r->r_tod / 3600, (r->r_tod / 60) % 60, r->r_tod % 60);
+
+	fprintf(stdout, "\
+RRULE:FREQ=YEARLY;BYMONTH=%d", r->r_month + 1);
+
+	switch (r->r_dycode) {
+	case DC_DOM:
+		fprintf(stdout, "\
+;BYMONTHDAY=%d", r->r_dayofmonth);
+		break;
+	case DC_DOWGEQ:
+		if (!((r->r_dayofmonth - 1) % DAYSPERWEEK)) {
+			/* be intelligent about this one */
+			fprintf(stdout, "\
+;BYDAY=%d%s", (r->r_dayofmonth - 1) / DAYSPERWEEK + 1, wday[r->r_wday]);
+		} else {
+			fprintf(stdout, "\
+;BYDAY=%s;BYMONTHDAY=%d,%d,%d,%d,%d,%d,%d", wday[r->r_wday],
+			r->r_dayofmonth + 0,
+			r->r_dayofmonth + 1,
+			r->r_dayofmonth + 2,
+			r->r_dayofmonth + 3,
+			r->r_dayofmonth + 4,
+			r->r_dayofmonth + 5,
+			r->r_dayofmonth + 6);
+		}
+		break;
+	case DC_DOWLEQ:
+		if (r->r_dayofmonth == 31) {
+			/* be intelligent again */
+			fprintf(stdout, "\
+;BYDAY=-1%s", wday[r->r_wday]);
+		} else {
+			fprintf(stdout, "\
+;BYDAY=%s;BYMONTHDAY=%d,%d,%d,%d,%d,%d,%d", wday[r->r_wday],
+			r->r_dayofmonth - 6,
+			r->r_dayofmonth - 5,
+			r->r_dayofmonth - 4,
+			r->r_dayofmonth - 3,
+			r->r_dayofmonth - 2,
+			r->r_dayofmonth - 1,
+			r->r_dayofmonth - 0);
+		}
+		break;
+	}
+	if (r->r_hiyear != ZIC_MAX) {
+		fprintf(stdout,
+			";UNTIL=%" PRIdZIC "1231T235959Z",
+			r->r_hiyear);
+	}
+	fputc('\n', stdout);
+
+	fputs("END:VEVENT\n", stdout);
+	return;
+}
+
+static void
+pr_ical(const struct zone z[static 1U], size_t nz)
+{
+	for (size_t i = 0U; i < nz; i++) {
+		for (size_t j = 0U; j < z[i].z_nrules; j++) {
+			pr_ical_r(z + i, z[i].z_rules + j);
+		}
+	}
+	return;
+}
+
 
 #include "tzicc.yucc"
 
@@ -966,6 +1076,20 @@ main(int argc, char *argv[])
 
 	/* associate rules and zones */
 	associate();
+
+	if (LIKELY(nzones)) {
+		pr_ical_hdr();
+	}
+	for (size_t i = 0U, j; i < nzones; i = j) {
+		/* find zone span */
+		const char *z = zones[i].z_name;
+		for (j = i + 1U; j < nzones && zones[j].z_name == z; j++);
+
+		pr_ical(zones + i, j - i);
+	}
+	if (LIKELY(nzones)) {
+		pr_ical_ftr();
+	}
 
 out:
 	yuck_free(argi);
