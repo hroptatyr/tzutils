@@ -629,7 +629,7 @@ rulesub(register struct rule *const rp,
 	if ((lp = byword(dp, lasts)) != NULL) {
 		rp->r_dycode = DC_DOWLEQ;
 		rp->r_wday = lp->l_value;
-		rp->r_dayofmonth = len_months[1][rp->r_month];
+		rp->r_dayofmonth = 31;
 	} else {
 		if ((ep = strchr(dp, '<')) != 0)
 			rp->r_dycode = DC_DOWLEQ;
