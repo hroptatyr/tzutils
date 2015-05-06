@@ -1065,9 +1065,20 @@ main(int argc, char *argv[])
 	}
 	for (size_t i = 0U, j; i < nzones; i = j) {
 		/* find zone span */
-		const char *z = zones[i].z_name;
+		obint_t z = zones[i].z_name;
+		const char *zn = obint_name(zobs, z);
 		for (j = i + 1U; j < nzones && zones[j].z_name == z; j++);
 
+		/* filter */
+		for (size_t k = 0U; k < argi->zone_nargs; k++) {
+			if (!strcmp(zn, argi->zone_args[k])) {
+				goto pr;
+			}
+		}
+		if (argi->zone_nargs) {
+			continue;
+		}
+	pr:
 		pr_ical(zones + i, j - i);
 	}
 	if (LIKELY(nzones)) {
