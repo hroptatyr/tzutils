@@ -162,27 +162,31 @@ static const zic_t max_time = -1 - ((zic_t)-1 << (TIME_T_BITS_IN_FILE - 1));
 struct rule {
 	obint_t r_name;
 
-	zic_t r_loyear;	/* for example, 1986 */
-	zic_t r_hiyear;	/* for example, 1986 */
+	zic_t r_loyear;
+	zic_t r_hiyear;
 	obint_t r_yrtype;
 	bool r_lowasnum;
 	bool r_hiwasnum;
 
-	int r_month;	/* 0..11 */
+	/* 0..11 */
+	int r_month;
 
-	int r_dycode;	/* see below */
+	/* see below */
+	int r_dycode;
 	int r_dayofmonth;
 	int r_wday;
 
-	zic_t r_tod;		/* time from midnight */
-	bool r_todisstd;	/* above is standard time if 1 */
-					/* or wall clock time if 0 */
-	bool r_todisgmt;	/* above is GMT if 1 */
-					/* or local time if 0 */
-	zic_t r_stdoff;	/* offset from standard time */
+	/* time from midnight */
+	zic_t r_tod;
+	/* above is standard time if 1 */
+	/* or wall clock time if 0 */
+	bool r_todisstd;
+	/* above is GMT if 1 */
+	/* or local time if 0 */
+	bool r_todisgmt;
 
-	int r_todo;		/* a rule to do (used in outzone) */
-	zic_t r_temp;		/* used in outzone */
+	/* offset from standard time */
+	zic_t r_stdoff;
 };
 
 /* fields on a Rule line */
