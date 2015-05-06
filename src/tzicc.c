@@ -164,7 +164,7 @@ struct rule {
 
 	zic_t r_loyear;	/* for example, 1986 */
 	zic_t r_hiyear;	/* for example, 1986 */
-	const char *r_yrtype;
+	obint_t r_yrtype;
 	bool r_lowasnum;
 	bool r_hiwasnum;
 
@@ -609,13 +609,13 @@ rulesub(register struct rule *const rp,
 		return;
 	}
 	if (*typep == '\0' || *typep == '-')
-		rp->r_yrtype = NULL;
+		rp->r_yrtype = 0U;
 	else {
 		if (rp->r_loyear == rp->r_hiyear) {
 			error(_("typed single year"));
 			return;
 		}
-		rp->r_yrtype = strdup(typep);
+		rp->r_yrtype = intern(NULL, typep, 0U);
 	}
 	/*
 	** Day work.
@@ -1077,6 +1077,7 @@ main(int argc, char *argv[])
 	/* set them obarrays free again */
 	free_obarray(robs);
 	free_obarray(zobs);
+	free_obarray(NULL);
 out:
 	yuck_free(argi);
 	return rc;
