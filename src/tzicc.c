@@ -180,7 +180,6 @@ struct rule {
 	bool r_todisgmt;	/* above is GMT if 1 */
 					/* or local time if 0 */
 	zic_t r_stdoff;	/* offset from standard time */
-	const char *r_abbrvar;	/* variable part of abbreviation */
 
 	int r_todo;		/* a rule to do (used in outzone) */
 	zic_t r_temp;		/* used in outzone */
@@ -203,7 +202,6 @@ struct zone {
 	obint_t z_name;
 	zic_t z_gmtoff;
 	obint_t z_rule;
-	const char *z_format;
 
 	zic_t z_stdoff;
 
@@ -240,9 +238,6 @@ struct zone {
 
 static obarray_t zobs;
 static obarray_t robs;
-
-static size_t max_abbrvar_len;
-static size_t max_format_len;
 
 static const int len_months[2U][MONSPERYEAR] = {
 	{31U, 28U, 31U, 30U, 31U, 30U, 31U, 31U, 30U, 31U, 30U, 31U},
@@ -685,10 +680,6 @@ inrule(const char *base, off_t f[static 16U], size_t nf)
 		base + f[RF_LOYEAR], base + f[RF_HIYEAR], base + f[RF_COMMAND],
 		base + f[RF_MONTH], base + f[RF_DAY], base + f[RF_TOD]);
 	r.r_name = intern(robs, base + f[RF_NAME], 0U);
-	r.r_abbrvar = strdup(base + f[RF_ABBRVAR]);
-	if (max_abbrvar_len < strlen(r.r_abbrvar)) {
-		max_abbrvar_len = strlen(r.r_abbrvar);
-	}
 	if (nrules >= zrules) {
 		const size_t nuz = (2U * zrules) ?: 64U;
 		rules = realloc(rules, nuz * sizeof(*rules));
@@ -734,10 +725,6 @@ inzsub(const char *base, off_t flds[static 16U], size_t nflds, bool contp)
 		}
 	}
 	z.z_rule = intern(robs, base + flds[i_rule], 0U);
-	z.z_format = strdup(base + flds[i_format]);
-	if (max_format_len < strlen(z.z_format)) {
-		max_format_len = strlen(z.z_format);
-	}
 	hasuntil = nflds > (size_t)i_untilyear;
 	if (hasuntil) {
 		rulesub(&z.z_untilrule,
@@ -932,13 +919,6 @@ associate(void)
 		zones[i].z_stdoff =
 			gethms(obint_name(robs, zones[i].z_rule),
 			       _("unruly zone"), true);
-		/*
-		** Note, though, that if there's no rule,
-		** a '%s' in the format is a bad thing.
-		*/
-		if (strchr(zones[i].z_format, '%') != 0) {
-			error(_("%%s in ruleless zone"));
-		}
 	}
 	return;
 }
