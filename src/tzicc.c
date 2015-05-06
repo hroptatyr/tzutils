@@ -178,12 +178,12 @@ struct rule {
 
 	/* time from midnight */
 	zic_t r_tod;
-	/* above is standard time if 1 */
-	/* or wall clock time if 0 */
-	bool r_todisstd;
-	/* above is GMT if 1 */
-	/* or local time if 0 */
-	bool r_todisgmt;
+	/* qualifier for r_tod */
+	enum {
+		TOD_WALL,
+		TOD_STD,
+		TOD_UTC,
+	} r_todq;
 
 	/* offset from standard time */
 	zic_t r_stdoff;
@@ -543,33 +543,30 @@ rulesub(register struct rule *const rp,
 		return;
 	}
 	rp->r_month = lp->l_value;
-	rp->r_todisstd = false;
-	rp->r_todisgmt = false;
-	dp = strdup(timep);
-	if (*dp != '\0') {
-		ep = dp + strlen(dp) - 1;
-		switch (lowerit(*ep)) {
-			case 's':	/* Standard */
-				rp->r_todisstd = true;
-				rp->r_todisgmt = false;
-				*ep = '\0';
-				break;
-			case 'w':	/* Wall */
-				rp->r_todisstd = false;
-				rp->r_todisgmt = false;
-				*ep = '\0';
-				break;
-			case 'g':	/* Greenwich */
-			case 'u':	/* Universal */
-			case 'z':	/* Zulu */
-				rp->r_todisstd = true;
-				rp->r_todisgmt = true;
-				*ep = '\0';
-				break;
+	rp->r_todq = TOD_WALL;
+	if (*timep != '\0') {
+		size_t ztimep = strlen(timep);
+		switch (lowerit(timep[ztimep - 1])) {
+		case 's':
+			/* Standard */
+			rp->r_todq = TOD_STD;
+			break;
+		default:
+		case 'w':
+			/* Wall */
+			rp->r_todq = TOD_WALL;
+			break;
+
+		case 'g':
+		case 'u':
+		case 'z':
+			/* Greenwich/Universal/Zulu */
+			rp->r_todq = TOD_UTC;
+			break;
 		}
 	}
-	rp->r_tod = gethms(dp, _("invalid time of day"), false);
-	free(dp);
+	rp->r_tod = gethms(timep, _("invalid time of day"), false);
+
 	/*
 	** Year work.
 	*/
