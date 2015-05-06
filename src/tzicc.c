@@ -959,7 +959,7 @@ pr_ical_r(const struct zone z[static 1U], const struct rule r[static 1U])
 	fputs("BEGIN:VEVENT\n", stdout);
 
 	fprintf(stdout, "\
-SUMMARY:Daylight saving transition %s -> UTC%+02d:%02d:%02d\n",
+SUMMARY:Daylight saving transition %s -> UTC%+03d:%02d:%02d\n",
 		obint_name(zobs, z->z_name),
 		new / 3600, (new / 60) % 60, new % 60);
 
