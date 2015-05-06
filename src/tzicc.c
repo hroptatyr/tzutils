@@ -54,6 +54,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include "tzfile.h"
+#include "intern.h"
 #include "nifty.h"
 
 #define _(x)	(x)
@@ -159,7 +160,7 @@ static const zic_t max_time = -1 - ((zic_t)-1 << (TIME_T_BITS_IN_FILE - 1));
 #define DC_DOWLEQ	2	/* 1..31 */	/* 0..6 (Sun..Sat) */
 
 struct rule {
-	const char *r_name;
+	obint_t r_name;
 
 	zic_t r_loyear;	/* for example, 1986 */
 	zic_t r_hiyear;	/* for example, 1986 */
@@ -199,9 +200,9 @@ struct rule {
 
 
 struct zone {
-	const char *z_name;
+	obint_t z_name;
 	zic_t z_gmtoff;
-	const char *z_rule;
+	obint_t z_rule;
 	const char *z_format;
 
 	zic_t z_stdoff;
@@ -236,6 +237,9 @@ struct zone {
 #define ZONEC_MINFIELDS	3
 #define ZONEC_MAXFIELDS	7
 
+
+static obarray_t zobs;
+static obarray_t robs;
 
 static size_t max_abbrvar_len;
 static size_t max_format_len;
@@ -680,7 +684,7 @@ inrule(const char *base, off_t f[static 16U], size_t nf)
 	rulesub(&r,
 		base + f[RF_LOYEAR], base + f[RF_HIYEAR], base + f[RF_COMMAND],
 		base + f[RF_MONTH], base + f[RF_DAY], base + f[RF_TOD]);
-	r.r_name = strdup(base + f[RF_NAME]);
+	r.r_name = intern(robs, base + f[RF_NAME], 0U);
 	r.r_abbrvar = strdup(base + f[RF_ABBRVAR]);
 	if (max_abbrvar_len < strlen(r.r_abbrvar)) {
 		max_abbrvar_len = strlen(r.r_abbrvar);
@@ -720,7 +724,7 @@ inzsub(const char *base, off_t flds[static 16U], size_t nflds, bool contp)
 		i_untilmonth = ZF_TILMONTH;
 		i_untilday = ZF_TILDAY;
 		i_untiltime = ZF_TILTIME;
-		z.z_name = strdup(base + flds[ZF_NAME]);
+		z.z_name = intern(zobs, base + flds[ZF_NAME], 0U);
 	}
 	z.z_gmtoff = gethms(base + flds[i_gmtoff], _("invalid UT offset"), true);
 	if ((cp = strchr(base + flds[i_format], '%')) != 0) {
@@ -729,7 +733,7 @@ inzsub(const char *base, off_t flds[static 16U], size_t nflds, bool contp)
 			return false;
 		}
 	}
-	z.z_rule = strdup(base + flds[i_rule]);
+	z.z_rule = intern(robs, base + flds[i_rule], 0U);
 	z.z_format = strdup(base + flds[i_format]);
 	if (max_format_len < strlen(z.z_format)) {
 		max_format_len = strlen(z.z_format);
@@ -777,13 +781,6 @@ inzone(const char *base, off_t flds[static 16U], size_t nflds)
 	if (nflds < ZONE_MINFIELDS || nflds > ZONE_MAXFIELDS) {
 		error(_("wrong number of fields on Zone line"));
 		return -1;
-	}
-	for (size_t i = 0U; i < nzones; i++) {
-		if (zones[i].z_name != NULL &&
-		    !strcmp(zones[i].z_name, base + flds[ZF_NAME])) {
-			error(_("duplicate zone name %s"), base + flds[ZF_NAME]);
-			return -1;
-		}
 	}
 	return inzsub(base, flds, nflds, false);
 }
@@ -896,8 +893,9 @@ associate(void)
 */
 	auto inline int rcomp(const void *cp1, const void *cp2)
 	{
-		return strcmp(((const struct rule *) cp1)->r_name,
-			      ((const struct rule *) cp2)->r_name);
+		const struct rule *r1 = cp1;
+		const struct rule *r2 = cp2;
+		return r1->r_name - r2->r_name;
 	}
 
 	if (nrules) {
@@ -911,12 +909,12 @@ associate(void)
 	}
 	for (size_t base = 0U, out; base < nrules; base = out) {
 		for (out = base + 1U; out < nrules; out++) {
-			if (strcmp(rules[base].r_name, rules[out].r_name)) {
+			if (rules[base].r_name != rules[out].r_name) {
 				break;
 			}
 		}
 		for (size_t i = 0U; i < nzones; i++) {
-			if (strcmp(zones[i].z_rule, rules[base].r_name)) {
+			if (zones[i].z_rule != rules[base].r_name) {
 				continue;
 			}
 			zones[i].z_rules = rules + base;
@@ -932,7 +930,8 @@ associate(void)
 		** Maybe we have a local standard time offset.
 		*/
 		zones[i].z_stdoff =
-			gethms(zones[i].z_rule, _("unruly zone"), true);
+			gethms(obint_name(robs, zones[i].z_rule),
+			       _("unruly zone"), true);
 		/*
 		** Note, though, that if there's no rule,
 		** a '%s' in the format is a bad thing.
@@ -981,7 +980,7 @@ pr_ical_r(const struct zone z[static 1U], const struct rule r[static 1U])
 
 	fprintf(stdout, "\
 SUMMARY:Daylight saving transition %s -> UTC%+02d:%02d:%02d\n",
-		z->z_name,
+		obint_name(zobs, z->z_name),
 		new / 3600, (new / 60) % 60, new % 60);
 
 	fprintf(stdout, "\
@@ -1068,6 +1067,10 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
+	/* set up obarrays */
+	robs = make_obarray();
+	zobs = make_obarray();
+
 	for (size_t i = 0U; i < argi->nargs; i++) {
 		const char *fn = argi->args[i];
 
@@ -1091,6 +1094,9 @@ main(int argc, char *argv[])
 		pr_ical_ftr();
 	}
 
+	/* set them obarrays free again */
+	free_obarray(robs);
+	free_obarray(zobs);
 out:
 	yuck_free(argi);
 	return rc;
