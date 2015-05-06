@@ -812,7 +812,7 @@ getfields(off_t flds[static 16U], char *line, size_t llen)
 		/* otherwise, we've got ourselves a field */
 		flds[nf] = lp - (unsigned char*)line;
 
-		if (LIKELY(*lp != '"')) {
+		if (LIKELY(*lp++ != '"')) {
 			/* go to next space */
 			for (; lp < ep && *lp > ' '; lp++);
 		} else {
@@ -820,7 +820,7 @@ getfields(off_t flds[static 16U], char *line, size_t llen)
 			/* find matching " */
 			for (; lp < ep && *lp != '"'; lp++);
 		}
-		*lp = '\0';
+		*lp++ = '\0';
 	}
 	return nf;
 }
