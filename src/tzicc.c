@@ -331,6 +331,163 @@ time_overflow(void)
 	exit(EXIT_FAILURE);
 }
 
+
+/* date algos, mostly stolen from dateutils */
+#define GREG_DAYS_P_WEEK	7U
+
+static inline __attribute__((const, pure)) unsigned int
+__leapp(unsigned int year)
+{
+	return year % 4U == 0 && (year % 100U != 0U || year % 400U == 0U);
+}
+
+static inline __attribute__((const, pure)) unsigned int
+__get_jan01_wday(unsigned int year)
+{
+/* get the weekday of jan01 in YEAR
+ * using the 28y cycle thats valid till the year 2399
+ * 1920 = 16 mod 28
+ * switch variant */
+# define M	(TM_MONDAY)
+# define T	(TM_TUESDAY)
+# define W	(TM_WEDNESDAY)
+# define R	(TM_THURSDAY)
+# define F	(TM_FRIDAY)
+# define A	(TM_SATURDAY)
+# define S	(TM_SUNDAY)
+
+	switch (year % 28U) {
+	case 0:
+		return F;
+	case 1:
+		return S;
+	case 2:
+		return M;
+	case 3:
+		return T;
+	case 4:
+		return W;
+	case 5:
+		return F;
+	case 6:
+		return A;
+	case 7:
+		return S;
+	case 8:
+		return M;
+	case 9:
+		return W;
+	case 10:
+		return R;
+	case 11:
+		return F;
+	case 12:
+		return A;
+	case 13:
+		return M;
+	case 14:
+		return T;
+	case 15:
+		return W;
+	case 16:
+		return R;
+	case 17:
+		return A;
+	case 18:
+		return S;
+	case 19:
+		return M;
+	case 20:
+		return T;
+	case 21:
+		return R;
+	case 22:
+		return F;
+	case 23:
+		return A;
+	case 24:
+		return S;
+	case 25:
+		return T;
+	case 26:
+		return W;
+	case 27:
+		return R;
+	}
+# undef M
+# undef T
+# undef W
+# undef R
+# undef F
+# undef A
+# undef S
+	return -1U;
+}
+
+static inline __attribute__((const, pure)) unsigned int
+__md_get_yday(unsigned int year, unsigned int mon, unsigned int dom)
+{
+	static uint16_t __mon_yday[] = {
+		/* this is \sum ml,
+		 * first element is a bit set of leap days to add */
+		0xfff8U, 0U,
+		31U, 59U, 90U, 120U, 151U, 181U,
+		212U, 243U, 273U, 304U, 334U, 365U
+	};
+	return __mon_yday[mon] + dom + UNLIKELY(__leapp(year) && mon >= 3U);
+}
+
+static __attribute__((pure)) unsigned int
+__get_m01_wday(unsigned int year, unsigned int mon)
+{
+/* get the weekday of the first of MONTH in YEAR */
+	unsigned int off;
+	unsigned int cand;
+
+	assert(mon >= 1U && mon <= 12U);
+	cand = __get_jan01_wday(year);
+	off = __md_get_yday(year, mon, 0U);
+	off = (cand + off) % GREG_DAYS_P_WEEK;
+	return off;
+}
+
+static __attribute__((pure)) unsigned int
+__get_mdays(unsigned int year, unsigned int mon)
+{
+/* get the number of days in Y-M */
+	unsigned int res;
+
+	assert(mon >= 1U && mon <= 12U);
+	/* use our cumulative yday array */
+	res = __md_get_yday(year, mon + 1U, 0U);
+	return res - __md_get_yday(year, mon, 0U);
+}
+
+static __attribute__((pure)) unsigned int
+__ymcw_get_mday(unsigned int y, unsigned int m, unsigned int c, unsigned int w)
+{
+	unsigned int wd01;
+	unsigned int res;
+
+	assert(m > 0U);
+	assert(c > 0U);
+
+	/* see what weekday the first of the month was*/
+	wd01 = __get_m01_wday(y, m);
+
+	/* first WD1 is 1, second WD1 is 8, third WD1 is 15, etc.
+	 * so the first WDx with WDx > WD1 is on (WDx - WD1) + 1 */
+	res = (w + GREG_DAYS_P_WEEK - wd01) % GREG_DAYS_P_WEEK + 1U;
+	res += GREG_DAYS_P_WEEK * (c - 1U);
+	/* not all months have a 5th X, so check for this */
+	if (res > __get_mdays(y, m)) {
+		 /* 5th = 4th in that case */
+		res -= GREG_DAYS_P_WEEK;
+	}
+	return res;
+}
+
+
 static __attribute__((pure)) zic_t
 oadd(const zic_t t1, const zic_t t2)
 {
@@ -960,6 +1117,7 @@ pr_ical_r(const struct zone z[static 1U], const struct rule r[static 1U])
 	int new = z->z_gmtoff + r->r_stdoff;
 	/* calculate start time, the first event */
 	int newh = r->r_tod;
+	int y, m, d;
 
 	if (UNLIKELY(r->r_loyear == ZIC_MIN)) {
 		return;
@@ -972,25 +1130,30 @@ SUMMARY:Daylight saving transition %s -> UTC%+03d:%02d:%02d\n",
 		obint_name(zobs, z->z_name),
 		new / 3600, (new / 60) % 60, new % 60);
 
+	y = r->r_loyear;
+	m = r->r_month + 1;
 	fprintf(stdout, "\
-DTSTART:%" PRIdZIC "0101T%02d%02d%02d%c\n",
-		r->r_loyear,
-		newh / 3600, (newh / 60) % 60, newh % 60, qsuf[r->r_todq]);
+RRULE:FREQ=YEARLY;BYMONTH=%d", m);
 
-	fprintf(stdout, "\
-RRULE:FREQ=YEARLY;BYMONTH=%d", r->r_month + 1);
-
+	/* decipher the rule for the day-of-month,
+	 * and fill in D for DTSTART on the way */
 	switch (r->r_dycode) {
 	case DC_DOM:
+		d = r->r_dayofmonth;
 		fprintf(stdout, "\
-;BYMONTHDAY=%d", r->r_dayofmonth);
+;BYMONTHDAY=%d", d);
 		break;
 	case DC_DOWGEQ:
 		if (!((r->r_dayofmonth - 1) % DAYSPERWEEK)) {
 			/* be intelligent about this one */
+			int c = (r->r_dayofmonth - 1) / DAYSPERWEEK + 1;
+			unsigned int w = r->r_wday;
+
+			d = __ymcw_get_mday(y, m, c, w);
 			fprintf(stdout, "\
-;BYDAY=%d%s", (r->r_dayofmonth - 1) / DAYSPERWEEK + 1, wday[r->r_wday]);
+;BYDAY=%d%s", c, wday[w]);
 		} else {
+			d = 1;
 			fprintf(stdout, "\
 ;BYDAY=%s;BYMONTHDAY=%d,%d,%d,%d,%d,%d,%d", wday[r->r_wday],
 			r->r_dayofmonth + 0,
@@ -1005,9 +1168,13 @@ RRULE:FREQ=YEARLY;BYMONTH=%d", r->r_month + 1);
 	case DC_DOWLEQ:
 		if (r->r_dayofmonth == 31) {
 			/* be intelligent again */
+			unsigned int w = r->r_wday;
+
+			d = __ymcw_get_mday(y, m, 5U, w);
 			fprintf(stdout, "\
-;BYDAY=-1%s", wday[r->r_wday]);
+;BYDAY=-1%s", wday[w]);
 		} else {
+			d = 1;
 			fprintf(stdout, "\
 ;BYDAY=%s;BYMONTHDAY=%d,%d,%d,%d,%d,%d,%d", wday[r->r_wday],
 			r->r_dayofmonth - 6,
@@ -1026,6 +1193,11 @@ RRULE:FREQ=YEARLY;BYMONTH=%d", r->r_month + 1);
 			r->r_hiyear);
 	}
 	fputc('\n', stdout);
+
+	fprintf(stdout, "\
+DTSTART:%04d%02d%02dT%02d%02d%02d%c\n",
+		y, m, d,
+		newh / 3600, (newh / 60) % 60, newh % 60, qsuf[r->r_todq]);
 
 	fputs("END:VEVENT\n", stdout);
 	return;
