@@ -1118,9 +1118,14 @@ pr_ical_r(const struct zone z[static 1U], const struct rule r[static 1U])
 	/* calculate start time, the first event */
 	int newh = r->r_tod;
 	int y, m, d;
+	int uy = 0;
+	int ud;
 
 	if (UNLIKELY(r->r_loyear == ZIC_MIN)) {
 		return;
+	}
+	if (r->r_hiyear != ZIC_MAX) {
+		uy = r->r_hiyear;
 	}
 
 	fputs("BEGIN:VEVENT\n", stdout);
@@ -1140,6 +1145,7 @@ RRULE:FREQ=YEARLY;BYMONTH=%d", m);
 	switch (r->r_dycode) {
 	case DC_DOM:
 		d = r->r_dayofmonth;
+		ud = r->r_dayofmonth;
 		fprintf(stdout, "\
 ;BYMONTHDAY=%d", d);
 		break;
@@ -1150,6 +1156,9 @@ RRULE:FREQ=YEARLY;BYMONTH=%d", m);
 			unsigned int w = r->r_wday;
 
 			d = __ymcw_get_mday(y, m, c, w);
+			if (uy) {
+				ud = __ymcw_get_mday(uy, m, c, w);
+			}
 			fprintf(stdout, "\
 ;BYDAY=%d%s", c, wday[w]);
 		} else {
@@ -1171,6 +1180,9 @@ RRULE:FREQ=YEARLY;BYMONTH=%d", m);
 			unsigned int w = r->r_wday;
 
 			d = __ymcw_get_mday(y, m, 5U, w);
+			if (uy) {
+				ud = __ymcw_get_mday(uy, m, 5U, w);
+			}
 			fprintf(stdout, "\
 ;BYDAY=-1%s", wday[w]);
 		} else {
@@ -1188,9 +1200,11 @@ RRULE:FREQ=YEARLY;BYMONTH=%d", m);
 		break;
 	}
 	if (r->r_hiyear != ZIC_MAX) {
-		fprintf(stdout,
-			";UNTIL=%" PRIdZIC "1231T235959Z",
-			r->r_hiyear);
+		fprintf(stdout, "\
+;UNTIL=%04d%02d%02dT%02d%02d%02d%c",
+			uy, m, ud,
+			newh / 3600, (newh / 60) % 60, newh % 60,
+			qsuf[r->r_todq]);
 	}
 	fputc('\n', stdout);
 
