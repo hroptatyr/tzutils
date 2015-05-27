@@ -951,7 +951,15 @@ pr_ical_r(const struct zone z[static 1U], const struct rule r[static 1U])
 	static const char *wday[DAYSPERWEEK] = {
 		"SU", "MO", "TU", "WE", "TH", "FR", "SA",
 	};
+	static const char qsuf[] = {
+		[TOD_WALL] = 'W',
+		[TOD_STD] = 'S',
+		[TOD_UTC] = 'Z',
+	};
+	/* we only support transitions given in utc time */
 	int new = z->z_gmtoff + r->r_stdoff;
+	/* calculate start time, the first event */
+	int newh = r->r_tod;
 
 	if (UNLIKELY(r->r_loyear == ZIC_MIN)) {
 		return;
@@ -965,9 +973,9 @@ SUMMARY:Daylight saving transition %s -> UTC%+03d:%02d:%02d\n",
 		new / 3600, (new / 60) % 60, new % 60);
 
 	fprintf(stdout, "\
-DTSTART:%" PRIdZIC "0101T%02" PRIdZIC "%02" PRIdZIC "%02" PRIdZIC "\n",
+DTSTART:%" PRIdZIC "0101T%02d%02d%02d%c\n",
 		r->r_loyear,
-		r->r_tod / 3600, (r->r_tod / 60) % 60, r->r_tod % 60);
+		newh / 3600, (newh / 60) % 60, newh % 60, qsuf[r->r_todq]);
 
 	fprintf(stdout, "\
 RRULE:FREQ=YEARLY;BYMONTH=%d", r->r_month + 1);
