@@ -2,4 +2,6 @@ Usage: tzicc [FILE]...
 
 Process zoneinfo definition FILEs and output ical events.
 
+Definitions can be found at git://github.com/eggert/tz.git
+
   -z, --zone=NAME...    Output zone NAME only.
