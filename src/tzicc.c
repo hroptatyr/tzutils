@@ -947,7 +947,7 @@ getfields(off_t flds[static 16U], char *line, size_t llen)
 	unsigned char *const ep = lp + llen;
 	size_t nf = 0U;
 
-	for (;; nf++) {
+	for (; nf < 16U; nf++) {
 		/* overread whitespace */
 		for (; lp < ep && *lp <= ' '; lp++);
 
