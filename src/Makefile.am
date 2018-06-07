@@ -22,6 +22,8 @@ EXTRA_DIST += version.c.in
 bin_PROGRAMS += tzicc
 tzicc_SOURCES = tzicc.c tzicc.yuck
 tzicc_SOURCES += intern.c intern.h
+tzicc_SOURCES += tzfile.h
+tzicc_SOURCES += nifty.h
 BUILT_SOURCES += tzicc.yucc
 
 
