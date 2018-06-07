@@ -34,14 +34,10 @@ AC_PROG_CC([icc cc gcc])
 SXE_CHECK_CC([c11 c1x c99 gnu99])
 SXE_CHECK_CFLAGS
 AC_C_BIGENDIAN
+AC_PROG_RANLIB
 
 ## check if yuck is globally available
 AX_CHECK_YUCK
-
-## libtool goddess^Wgoodness
-## has to be down here as we're turning -Werror'ing off
-LT_INIT
-SXE_CHECK_LDFLAGS
 
 AC_CONFIG_FILES([Makefile])
 AC_CONFIG_FILES([build-aux/Makefile])
