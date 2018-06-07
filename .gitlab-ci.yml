@@ -1,0 +1,20 @@
+image: gcc:6.3
+
+before_script:
+  - apt-get -q -m update || true
+  - autoreconf -vfi
+
+pages:
+  script:
+    - ./configure || { cat config.log; false; }
+    - make
+    - make check || { cat test/test-suite.log; false; }
+    - make V=1 distcheck
+    - mkdir -p public
+    - cp tzutils-*.tar.xz public/tzutils-latest.tar.xz
+    - cp tzutils-*.tar.gz public/tzutils-latest.tar.gz
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
