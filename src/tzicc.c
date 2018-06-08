@@ -1246,10 +1246,13 @@ main(int argc, char *argv[])
 	robs = make_obarray();
 	zobs = make_obarray();
 
-	for (size_t i = 0U; i < argi->nargs; i++) {
-		const char *fn = argi->args[i];
+	{
+		size_t i = 0U;
 
-		zic_fn(fn);
+		do {
+			const char *fn = argi->args[i];
+			zic_fn(fn);
+		} while (++i < argi->nargs);
 	}
 
 	/* associate rules and zones */

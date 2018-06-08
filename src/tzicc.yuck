@@ -1,6 +1,7 @@
 Usage: tzicc [FILE]...
 
 Process zoneinfo definition FILEs and output ical events.
+If FILE is omitted input is read from stdin.
 
 Definitions can be found at git://github.com/eggert/tz.git
 
